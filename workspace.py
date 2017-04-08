@@ -1,12 +1,11 @@
 import sublime_plugin
-import sublime
 import subprocess
+import os
 
 
 def first_folder(window):
     """
-    We only support running one stack-ide instance per window currently,
-    on the first folder open in that window.
+    return the first folder open in a window.
     """
     if len(window.folders()):
         return window.folders()[0]
@@ -14,48 +13,118 @@ def first_folder(window):
         print("Couldn't determine a root folder in this project")
         return None
 
-def run_command(args, cwd, handler):
+
+def run_command(cwd, args, handler):
     stdout, stderr = None, None
 
     try:
-       if os.name == 'nt':
-           startupinfo = subprocess.STARTUPINFO()
-           startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-       else:
-           startupinfo = None
-       proc = subprocess.Popen(
-           args=args, cwd=cwd, startupinfo=startupinfo,
-           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-           stdin=subprocess.PIPE)
-       stdout, stderr = proc.communicate()
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        else:
+            startupinfo = None
+        proc = subprocess.Popen(
+            args=args, cwd=cwd, startupinfo=startupinfo,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
     except OSError as error:
-       # print out system error message
-       print('\'git %s\' failed with \"%s\"' % (
-           args[1], error))
+        # print out system error message
+        print('\'git %s\' failed with \"%s\"' % (
+            args[1], error))
     finally:
-       handler(stdout.decode('utf-8').strip())
+        if stdout:
+            handler(stdout.decode('utf-8').strip())
+
+def open_changed(window, to_open):
+    for file in to_open:
+        if window.find_open_file(file) is None:
+            window.open_file(file)
+
+def only_changed(window, to_open):
+    open_changed(window, to_open)
+    close_not_changed(window, to_open)
+
+def close_not_changed(window, to_keep):
+    for view in window.views():
+        if not view.is_dirty():
+            if view.file_name() not in to_keep:
+                # print(view.file_name() + " not in " + str(to_keep))
+                view.close()
 
 
-def open_changed(result):
-    print(result)
+# class OldOpenChangedInGitCommand(sublime_plugin.WindowCommand):
+#     def run(self, query, only):
+#         project_root_dir = first_folder(self.window)
+#         # print("folder" + project_root_dir)
+
+#         def parse_and_dispatch(output, handler):
+#             full_paths = list(map(lambda file_path: os.path.join(project_root_dir, file_path),
+#                                   output.split('\n')))
+#             handler(full_paths)
+
+#         cmd = ['git', 'ls-files']
+#         if query == "changes":
+#             args = cmd.extend(['-o', '-m'])
+#         elif query == "staged":
+#             args = cmd.extend(['-o', '-s'])
+#         elif query == "changes":
+#             args = cmd.extend([])
+#         else:
+#             print("Unknown query: " + query)
+
+#         if only:
+#             handler = lambda file_paths: only_changed(self.window, file_paths)
+#         else:
+#             handler = lambda file_paths: open_changed(self.window, file_paths)
+
+#         run_command(project_root_dir, args,
+#                     lambda response: parse_and_dispatch(response, handler))
+
+#     def description():
+#         return "Workspace: Open all files changed"
+
 
 class OpenChangedInGitCommand(sublime_plugin.WindowCommand):
-    def run(self):
-        working_dir = first_folder(self.window)
-        print("folder" + working_dir)
-        run_command(working_dir, ['git', 'status'], open_changed)
-        #   None    Called when the command is run.
+    def run(self, query, only):
+        project_root_dir = first_folder(self.window)
+        # print("folder" + project_root_dir)
 
-    # def is_enabled():
-    #     return True #   bool    Returns True if the command is able to be run at this time. The default implementation simply always returns True.
+        def parse_line(line):
+            (index, worktree, file_path) = (line[0], line[1], line[3:])
+            return (index, worktree, os.path.join(project_root_dir, file_path))
 
-    # def is_visible():
-    #     return True #   bool    Returns True if the command should be shown in the menu at this time. The default implementation always returns True.
+        def parse_filter_and_dispatch(output, predicate, handler):
+            print(output)
+            entries = filter(predicate, map(parse_line, output.split('\n')))
+            full_paths = list(map(lambda e: e[2], entries))
+            handler(full_paths)
 
-    def description():
-        return "Workspace: Open all files changed"
+        def is_staged(entry):
+            return entry[0] in ['M', 'A', 'R', 'C']
 
+        def is_changed(entry):
+            return is_staged(entry) or entry[1] in ['M', '?']
 
-# class OpenOnlyChangedCommand(sublime_plugin.WindowCommand):
-# OpenStagedCommand
-# OpenOnlyStagedCommand
+        def is_conflict(entry):
+            return (entry[0] + entry[1]) in ['U.', '.U', 'DD', 'AA']
+            # see http://stackoverflow.com/questions/13893763/how-to-ask-git-if-the-repository-is-in-a-conflict-stage
+
+        cmd = ['git', 'status', '--porcelain']
+        if query == "changed":
+            predicate = is_changed
+        elif query == "staged":
+            predicate = is_staged
+        elif query == "conflicts":
+            predicate = is_conflict
+        else:
+            print("Unknown query: " + query)
+
+        if only:
+            handler = lambda file_paths: only_changed(self.window, file_paths)
+        else:
+            handler = lambda file_paths: open_changed(self.window, file_paths)
+
+        run_command(project_root_dir, cmd,
+                    lambda response: parse_filter_and_dispatch(response, predicate, handler))
+

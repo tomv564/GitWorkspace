@@ -2,12 +2,22 @@
     {
         "caption": "Workspace: Open Changed",
         "command": "open_changed_in_git",
-        "args": { "only": false}
+        "args": { "only": false, "query": "changed"}
     },
     {
         "caption": "Workspace: Only Changed",
         "command": "open_changed_in_git",
-        "args": { "only": true}
-    }
+        "args": { "only": true, "query": "changed"}
+    },
+    {
+        "caption": "Workspace: Only Staged",
+        "command": "open_changed_in_git",
+        "args": { "only": true, "query": "staged"}
+    },
+    {
+        "caption": "Workspace: Only Conflicts",
+        "command": "open_changed_in_git",
+        "args": { "only": true, "query": "conflicts"}
+    },
 
 ]
