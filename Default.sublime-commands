@@ -1,0 +1,13 @@
+[
+    {
+        "caption": "Workspace: Open Changed",
+        "command": "open_changed_in_git",
+        "args": { "only": false}
+    },
+    {
+        "caption": "Workspace: Only Changed",
+        "command": "open_changed_in_git",
+        "args": { "only": true}
+    }
+
+]
