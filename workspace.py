@@ -34,7 +34,7 @@ def run_command(cwd, args, handler):
             args[1], error))
     finally:
         if stdout:
-            handler(stdout.decode('utf-8').strip())
+            handler(stdout.decode('utf-8').rstrip())
 
 def open_changed(window, to_open):
     for file in to_open:
@@ -49,50 +49,27 @@ def close_not_changed(window, to_keep):
     for view in window.views():
         if not view.is_dirty():
             if view.file_name() not in to_keep:
-                # print(view.file_name() + " not in " + str(to_keep))
+                print(view.file_name() + " not in " + str(to_keep))
                 view.close()
 
 
-# class OldOpenChangedInGitCommand(sublime_plugin.WindowCommand):
-#     def run(self, query, only):
-#         project_root_dir = first_folder(self.window)
-#         # print("folder" + project_root_dir)
-
-#         def parse_and_dispatch(output, handler):
-#             full_paths = list(map(lambda file_path: os.path.join(project_root_dir, file_path),
-#                                   output.split('\n')))
-#             handler(full_paths)
-
-#         cmd = ['git', 'ls-files']
-#         if query == "changes":
-#             args = cmd.extend(['-o', '-m'])
-#         elif query == "staged":
-#             args = cmd.extend(['-o', '-s'])
-#         elif query == "changes":
-#             args = cmd.extend([])
-#         else:
-#             print("Unknown query: " + query)
-
-#         if only:
-#             handler = lambda file_paths: only_changed(self.window, file_paths)
-#         else:
-#             handler = lambda file_paths: open_changed(self.window, file_paths)
-
-#         run_command(project_root_dir, args,
-#                     lambda response: parse_and_dispatch(response, handler))
-
-#     def description():
-#         return "Workspace: Open all files changed"
-
-
 class OpenChangedInGitCommand(sublime_plugin.WindowCommand):
+    def __init__(self, window):
+        sublime_plugin.WindowCommand.__init__(self, window);
+        self.project_root_dir = first_folder(window)
+        run_command(self.project_root_dir, ["git", "rev-parse", "--show-toplevel"], lambda output: self.parse_git_root(output))
+
+    def parse_git_root(self, output):
+        normalized_path = os.path.normpath(output)
+        print("GitWorkspace git root:" + normalized_path)
+        self.git_root_dir = normalized_path
+
     def run(self, query, only):
-        project_root_dir = first_folder(self.window)
         # print("folder" + project_root_dir)
 
         def parse_line(line):
             (index, worktree, file_path) = (line[0], line[1], line[3:])
-            return (index, worktree, os.path.join(project_root_dir, file_path))
+            return (index, worktree, os.path.join(self.git_root_dir, file_path))
 
         def parse_filter_and_dispatch(output, predicate, handler):
             print(output)
@@ -125,6 +102,6 @@ class OpenChangedInGitCommand(sublime_plugin.WindowCommand):
         else:
             handler = lambda file_paths: open_changed(self.window, file_paths)
 
-        run_command(project_root_dir, cmd,
+        run_command(self.project_root_dir, cmd,
                     lambda response: parse_filter_and_dispatch(response, predicate, handler))
 
