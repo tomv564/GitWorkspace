@@ -47,7 +47,7 @@ def only_changed(window, to_open):
 
 def close_not_changed(window, to_keep):
     for view in window.views():
-        if not view.is_dirty():
+        if view.file_name() and not view.is_dirty():
             if view.file_name() not in to_keep:
                 print(view.file_name() + " not in " + str(to_keep))
                 view.close()
@@ -69,7 +69,7 @@ class OpenChangedInGitCommand(sublime_plugin.WindowCommand):
 
         def parse_line(line):
             (index, worktree, file_path) = (line[0], line[1], line[3:])
-            return (index, worktree, os.path.join(self.git_root_dir, file_path))
+            return (index, worktree, os.path.join(self.git_root_dir, os.path.normpath(file_path)))
 
         def parse_filter_and_dispatch(output, predicate, handler):
             print(output)
